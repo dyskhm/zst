@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基金净值走势图 - JSON数据源</title>
+    <script type="text/javascript" src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Microsoft YaHei, sans-serif;
+            background-color: #f5f5f5;
+        }
+        .header {
+            width: 100%;
+            text-align: center;
+            padding: 15px 0;
+            margin: 0;
+            background: #f5f5f5;
+            border-bottom: 1px solid #ddd;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 22px;
+            font-weight: bold;
+            color: #333;
+        }
+        .header p {
+            margin: 8px 0 0 0;
+            font-size: 13px;
+            color: #666;
+        }
+        .chart-container {
+            width: 1400px;
+            height: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: white;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+        }
+        .loading {
+            text-align: center;
+            padding: 100px 0;
+            font-size: 18px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>基金净值走势图</h1>
+        <p id="update-info">数据加载中...</p>
+    </div>
+    
+    <div id="fund-chart" class="chart-container"></div>
+    
+    <script>
+        // 初始化图表
+        var chart = echarts.init(document.getElementById('fund-chart'), 'light');
+        
+        // 配置项
+        var option = {
+            animation: true,
+            tooltip: {
+                trigger: "axis",
+                axisPointer: {
+                    type: "cross"
+                },
+                backgroundColor: "rgba(255,255,255,0.9)"
+            },
+            legend: {
+                type: "scroll",
+                top: "5%",
+                left: "center"
+            },
+            dataZoom: [
+                {
+                    rangeStart: 0,
+                    rangeEnd: 100,
+                    type: "inside"
+                },
+                {
+                    isShow: true,
+                    type: "slider",
+                    posBottom: "5%"
+                }
+            ],
+            yAxis: {
+                name: "单位净值",
+                nameLocation: "end",
+                axisLabel: {
+                    formatter: "{value}"
+                },
+                splitLine: {
+                    show: true
+                }
+            },
+            xAxis: {
+                name: "日期",
+                nameLocation: "end",
+                axisLabel: {
+                    rotate: 45
+                },
+                splitLine: {
+                    show: true
+                }
+            },
+            toolbox: {
+                isShow: true,
+                feature: {
+                    saveAsImage: {"title": "保存图片"},
+                    dataView: {"title": "数据视图", "lang": ["数据视图", "关闭", "刷新"]},
+                    restore: {"title": "还原"},
+                    dataZoom: {"title": "区域缩放"}
+                }
+            },
+            series: []
+        };
+        
+        // 读取本地JSON数据并绘制图表
+        fetch('fund_data.json')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // 更新页面标题信息
+                document.getElementById('update-info').innerHTML = 
+                    `数据更新至: ${data.last_trading_date}  |  共 ${data.total_days} 个交易日  |  最后更新: ${data.update_date}`;
+                
+                // 提取日期数据
+                var dates = data.data.map(item => item.日期);
+                
+                // 为每个基金创建一个系列
+                var series = data.fund_names.map(fundName => {
+                    // 提取该基金的净值数据
+                    var values = data.data.map(item => item[fundName] || 0);
+                    
+                    return {
+                        type: "line",
+                        name: fundName,
+                        smooth: true,
+                        showSymbol: true,
+                        symbolSize: 4,
+                        data: values,
+                        markPoint: {
+                            data: [
+                                {type: "min", name: "最低"},
+                                {type: "max", name: "最高"}
+                            ]
+                        },
+                        markLine: {
+                            data: [
+                                {type: "average", name: "均值"}
+                            ]
+                        }
+                    };
+                });
+                
+                // 设置图表数据
+                option.xAxis.data = dates;
+                option.series = series;
+                
+                // 计算Y轴范围
+                var allValues = [];
+                data.data.forEach(item => {
+                    data.fund_names.forEach(fundName => {
+                        var value = item[fundName] || 0;
+                        allValues.push(value);
+                    });
+                });
+                
+                var maxValue = Math.max(...allValues);
+                var minValue = Math.min(...allValues);
+                var margin = (maxValue - minValue) * 0.08;
+                
+                option.yAxis.max = maxValue + margin;
+                option.yAxis.min = Math.max(0, minValue - margin);
+                
+                // 渲染图表
+                chart.setOption(option);
+            })
+            .catch(error => {
+                console.error('Error loading data:', error);
+                document.getElementById('update-info').innerHTML = 
+                    '<span style="color: red;">数据加载失败，请检查文件是否存在</span>';
+            });
+        
+        // 响应窗口大小变化
+        window.addEventListener('resize', function() {
+            chart.resize();
+        });
+    </script>
+</body>
+</html>
